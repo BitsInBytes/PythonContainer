@@ -1,4 +1,4 @@
-﻿namespace PythonWrapper;
+﻿namespace PythonContainer;
 
 public class Sys : LazyPyObject
 {
@@ -7,5 +7,10 @@ public class Sys : LazyPyObject
     {
     }
 
-    public string Version => GetProperty<string>("version");
+    public string Version => InvokeProperty<string>("version");
+
+    public void AddPythonFileDirectory(string pathToPythonFiles)
+    {
+        DynamicObject.path.append(pathToPythonFiles);
+    }
 }

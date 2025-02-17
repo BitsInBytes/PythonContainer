@@ -2,14 +2,14 @@
 using static Python.Runtime.Py;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace PythonWrapper;
+namespace PythonContainer;
 
 public class PythonContainer
     : IDisposable
 {
     private readonly GILState _state;
     private readonly ServiceCollection _services;
-    private readonly ServiceProvider _provider;
+    private readonly Lazy<ServiceProvider> _provider;
 
     public PythonContainer(string pathToPythonDll, bool allowThreads)
     {
@@ -23,34 +23,43 @@ public class PythonContainer
         _state = Py.GIL();
 
         _services = new ServiceCollection();
-        _provider = _services.BuildServiceProvider();
 
-        ConfigureContainer((services, provider) =>
+        ConfigureContainer((services) =>
         {
             services.AddSingleton(this);
+            services.AddSingleton<Sys>();
+            services.AddSingleton<Clr>();
         });
+
+        _provider = new Lazy<ServiceProvider>(() => _services.BuildServiceProvider());
     }
 
-    public void ConfigureContainer(Action<ServiceCollection, ServiceProvider> configure)
+    public void AddPythonFileDirectory(string pathToPythonFiles)
+        => Resolve<Sys>().AddPythonFileDirectory(pathToPythonFiles);
+
+    public void AddReference(Type type)
+        => Resolve<Clr>().AddReference(type.Assembly.GetName().Name ?? throw new InvalidDataException("Assembly from type has no name"));
+
+    public void ConfigureContainer(Action<ServiceCollection> configure)
     {
-        configure(_services, _provider);
+        configure(_services);
     }
 
     public T Resolve<T>() where T : notnull
     {
-        var service = _provider.GetService<T>();
+        var service = _provider.Value.GetService<T>();
 
         if (service != null)
             return service;
 
-        return ActivatorUtilities.CreateInstance<T>(_provider);
+        throw new NotImplementedException($"{nameof(T)}");
     }
 
     public void Dispose()
     {
         //PythonEngine.Shutdown(); // UnsafeBinaryFormatterSerialization exception
 
-        _provider.Dispose();
+        _provider.Value.Dispose();
         _state.Dispose();
         
         GC.SuppressFinalize(this);
